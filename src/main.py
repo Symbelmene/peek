@@ -4,7 +4,6 @@ from connectors import PGConn
 from finclasses import Portfolio
 from strategies import ticker_should_be_sold, down_select_tickers
 
-
 def output_summary(data, date, pf):
     holdings = pf.calculate_value_of_holdings(data)
     print(f'Portfolio value on {date}: Cash: {round(pf.cash, 2)}, '

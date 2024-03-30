@@ -1,127 +1,103 @@
-import random
+import wandb
 import numpy as np
-import pandas as pd
 import tensorflow as tf
-from keras import layers
-from tqdm import tqdm
+from keras import layers, losses
+from keras.utils import to_categorical
 
-import utils
-from config import Config, Interval
+from config import Config
 cfg = Config()
 
-
-class Stock:
-    def __init__(self, name):
-        self.name = name
-        self.path = f'{cfg.DATA_DIR_24_HOUR}/{name}.csv'
-        self.data = self.load()
-
-    def load(self):
-        try:
-            df = pd.read_csv(self.path, index_col=0, parse_dates=['Date'])
-            return df[~df.index.duplicated(keep='first')]
-        except FileNotFoundError:
-            print(f"ERROR: File {self.path} not found")
-            exit(1)
-
-    def slice(self, start=None, end=None):
-        if not start:
-            start = self.data.index[0]
-        else:
-            end = pd.to_datetime(end)
-            if start < self.data.index[0]:
-                raise ValueError(f"ERROR: The time slice on the dataframe for {self.name} "
-                                    f"extends before the start of available data")
-        if not end:
-            end = self.data.index[-1]
-        else:
-            start = pd.to_datetime(start)
-            if end > self.data.index[-1]:
-                raise ValueError(f"ERROR: The time slice on the dataframe for {self.name} "
-                                    f"extends beyond the end of available data")
-
-        mask = (self.data.index >= start) & (self.data.index <= end)
-        self.data = self.data[mask]
+wandb.login(cfg.WANDB_API_KEY)
 
 
-def buildLSTMModel(historySize, numHistoryVars, predictionSize):
+def buildLSTMModel(historySize, numHistoryVars):
     # Builds and Functional LSTM model using the windowSize and numStocks as input and numActions
     # as output
     inputLayer = layers.Input(shape=(historySize, numHistoryVars))
-    x = layers.LSTM(64, activation='tanh', return_sequences=True)(inputLayer)
-    x = layers.LSTM(64, activation='tanh')(x)
-    x = layers.Dense(64, activation='relu')(x)
-    x = layers.Dropout(cfg.NEURAL_NETWORK.DROPOUT_RATE)(x)
-    x = layers.Dense(predictionSize*2, activation='relu')(x)
+    x = layers.LSTM(numHistoryVars, return_sequences=True)(inputLayer)
     x = layers.Flatten()(x)
-    x = layers.Dense(predictionSize*2, activation='relu')(x)
-    x = layers.Dense(predictionSize, activation='relu')(x)
-    outputLayer = layers.Softmax()(x)
+    x = layers.Dense(64, activation='relu')(x)
+    x = layers.Dense(32, activation='sigmoid')(x)
+    x = layers.Dense(16, activation='sigmoid')(x)
+    x = layers.Dense(8, activation='sigmoid')(x)
+    x = layers.Dense(4, activation='sigmoid')(x)
+    outputLayer = layers.Dense(2, activation='softmax')(x)
     model = tf.keras.Model(inputs=inputLayer, outputs=outputLayer)
-    model.compile(optimizer='adam', loss='mse', metrics=['accuracy'])
+    model.compile(optimizer='adam', loss=losses.binary_crossentropy, metrics=['accuracy'])
     return model
 
 
-def prepareTrainingDataset(historySize, predictionSize):
-    # Choose numStocks random stocks from the datasets
-    validTickers = utils.getValidTickers(Interval.DAY)
-    stocks = [Stock(ticker) for ticker in random.sample(validTickers, 500)]
+def trim_dataset_to_matching_labels(X, Y):
+    # Trims the dataset so that equal number of 0 and 1 labels are present
+    # This is done to prevent the model from learning to predict only one class
+    X_0 = X[Y == 0]
+    X_1 = X[Y == 1]
+    min_length = min(X_0.shape[0], X_1.shape[0])
+    X_0 = X_0[:min_length]
+    X_1 = X_1[:min_length]
+    X = np.vstack([X_0, X_1])
+    Y = np.hstack([np.zeros(min_length), np.ones(min_length)])
+
+    print(f'Reduced dataset to {X.shape[0]} samples with {min_length} samples of each class')
+    return X, Y
+
+
+def standardise_data(arr):
+    # Standardises columns in a 2D array using np.apply_along_axis and a lambda function
+    return np.apply_along_axis(lambda x: (x - x.min()) / (x.max() - x.min()), 0, arr)
+
+
+def prepareTrainingDataset():
+    X = np.load('../data/X.npy')
+    Y = np.load('../data/Y.npy')
+
+    X, Y = trim_dataset_to_matching_labels(X, Y)
+
+    # One-hot encode the labels
+    Y = np.array([to_categorical(y, num_classes=2) for y in Y])
+
+    # Normalise data on a per-item basis
+    X = np.apply_along_axis(standardise_data, 0, X)
 
     keys = ['Open', 'High', 'Low', 'Close', 'Volume']
-    xVals, yVals = [], []
-    for stock in tqdm(stocks):
-        df = stock.data
-        arr = np.array(df[keys])[1:,:]
-
-        # Slice the data in to windows of size windowSize
-        for i in range(arr.shape[0] - (historySize + predictionSize)):
-            xVal = arr[i:i+historySize]
-            yVal = arr[i+historySize:i+historySize+predictionSize, 3]
-
-            # Normalize the data
-            xVal = (xVal - np.mean(xVal, axis=0)) / np.std(xVal, axis=0)
-            yVal = (yVal - np.mean(yVal, axis=0)) / np.std(yVal, axis=0)
-
-            xVals.append(xVal)
-            yVals.append(yVal)
 
     # Shuffle the data
-    xVals, yVals = np.array(xVals), np.array(yVals)
-    indices = np.arange(xVals.shape[0])
+    indices = np.arange(X.shape[0])
     np.random.shuffle(indices)
-    xVals, yVals = xVals[indices], yVals[indices]
+    X, Y = X[indices], Y[indices]
 
     # Split the data into training and validation sets
-    split = int(xVals.shape[0] * 0.8)
-    xTrain, yTrain = xVals[:split], yVals[:split]
-    xVal, yVal = xVals[split:], yVals[split:]
+    split = int(X.shape[0] * 0.8)
+    x_train, y_train = X[:split], Y[:split]
+    x_val, y_val = X[split:], Y[split:]
 
-    # Save the data
-    np.save(f'../train/xTrain.npy', xTrain)
-    np.save(f'../train/yTrain.npy', yTrain)
-    np.save(f'../train/xVal.npy', xVal)
-    np.save(f'../train/yVal.npy', yVal)
+    return x_train, y_train, x_val, y_val
 
 
 def main():
-    print(tf.config.list_physical_devices('GPU'))
-    # Create dataset
-    #prepareTrainingDataset(10, 5)
+    RUN_CONFIG = {
+        'EPOCHS': 10,
+        'BATCH_SIZE': 256,
+        'HISTORY_SIZE': 30,
+        'NUM_HISTORY_VARS': 5
+    }
 
-    # Load dataset
-    xTrain = np.load(f'../train/xTrain.npy')
-    yTrain = np.load(f'../train/yTrain.npy')
-    xVal = np.load(f'../train/xVal.npy')
-    yVal = np.load(f'../train/yVal.npy')
+    # Create dataset
+    x_train, y_train, x_val, y_val = prepareTrainingDataset()
+
+    run = wandb.init(
+        project="peek",
+        config={
+        })
 
     # Build model
-    model = buildLSTMModel(historySize=10,
-                           numHistoryVars=5,
-                           predictionSize=5)
+    model = buildLSTMModel(historySize=x_train.shape[1],
+                           numHistoryVars=x_train.shape[2])
+
     print(model.summary())
 
     # Train model
-    model.fit(xTrain, yTrain, epochs=10, batch_size=256, validation_data=(xVal, yVal))
+    model.fit(x_train, y_train, epochs=10, batch_size=256, validation_data=(x_val, y_val))
 
 
 if __name__ == '__main__':

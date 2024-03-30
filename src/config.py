@@ -14,6 +14,9 @@ class Config:
         self.STORER_USER     = self.env['STORER_USER']
         self.STORER_PASSWORD = self.env['STORER_PASSWORD']
 
+        # Wandb details
+        self.WANDB_API_KEY = self.env['WANDB_API_KEY']
+
 
 def parseStrToBool(inputStr):
     if inputStr.lower() == 'true':
