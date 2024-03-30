@@ -1,3 +1,4 @@
+import os
 import wandb
 import numpy as np
 import tensorflow as tf
@@ -7,7 +8,14 @@ from keras.utils import to_categorical
 from config import Config
 cfg = Config()
 
-wandb.login(cfg.WANDB_API_KEY)
+
+class WandbConfigCallback(tf.keras.callbacks.Callback):
+    def __init__(self, run):
+        super(WandbConfigCallback, self).__init__()
+        self.run = run
+
+    def on_epoch_end(self, epoch, logs=None):
+        self.run.log({'epoch': epoch, **logs})
 
 
 def buildLSTMModel(historySize, numHistoryVars):
@@ -74,21 +82,18 @@ def prepareTrainingDataset():
     return x_train, y_train, x_val, y_val
 
 
-def main():
-    RUN_CONFIG = {
-        'EPOCHS': 10,
-        'BATCH_SIZE': 256,
-        'HISTORY_SIZE': 30,
-        'NUM_HISTORY_VARS': 5
-    }
+def load_model(model_path):
+    return tf.keras.models.load_model(model_path)
 
+
+def train_model(RUN_CFG):
     # Create dataset
     x_train, y_train, x_val, y_val = prepareTrainingDataset()
 
     run = wandb.init(
         project="peek",
-        config={
-        })
+        config=RUN_CFG,
+        dir='../wandb')
 
     # Build model
     model = buildLSTMModel(historySize=x_train.shape[1],
@@ -97,8 +102,16 @@ def main():
     print(model.summary())
 
     # Train model
-    model.fit(x_train, y_train, epochs=10, batch_size=256, validation_data=(x_val, y_val))
+    model.fit(x_train, y_train,
+              epochs=RUN_CFG.EPOCHS,
+              batch_size=RUN_CFG.BATCH_SIZE,
+              validation_data=(x_val, y_val),
+              callbacks=[WandbConfigCallback(run)])
 
+    # Save the model in models directory
+    if not os.path.exists('../models'):
+        os.makedirs('../models')
 
-if __name__ == '__main__':
-    main()
+    model.save(f'../models/{run.name}-model.h5')
+
+    return model

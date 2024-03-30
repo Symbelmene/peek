@@ -4,7 +4,6 @@ import traceback
 
 class Config:
     def __init__(self):
-        self.docker = True if 'DOCKERCONTAINER' in os.environ else False
         self.env = parseEnvFile('../.env')
 
         # Postgres details

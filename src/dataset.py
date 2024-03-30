@@ -1,7 +1,6 @@
 """
 Find stocks which are good for trading on mean reversion
 """
-import os
 import numpy as np
 import pandas as pd
 from connectors import PGConn
@@ -32,36 +31,26 @@ def extract_dataset_from_ticker(data, mask, input_length=30, return_futures=Fals
     return train_set, labels, futures
 
 
-def main():
-    MIN_RETURN = 0.03
-    RETURN_WINDOW = 5
-    MIN_RETURN_PERC_FOR_TICKER_TO_BE_CONSIDERED = 0.05
-
+def create(RUN_CFG):
     pg_conn = PGConn()
     tickers = pg_conn.get_tickers()
 
-    print(f'Ticker: Return points above {MIN_RETURN * 100}%')
+    print(f'Ticker: Return points above {RUN_CFG.MIN_RETURN * 100}%')
     train_set, label_set = [], []
     for ticker in tickers:
         data = pg_conn.fetch_ticker_data(ticker)
-        return_points = get_return_points_above_percentage(data, MIN_RETURN, RETURN_WINDOW)
+        return_points = get_return_points_above_percentage(data, RUN_CFG.MIN_RETURN, RUN_CFG.RETURN_WINDOW)
         percentage_return_points = return_points.sum() / len(data)
         print(f'{ticker}: {round(100*percentage_return_points, 1)}% points')
-        if percentage_return_points > MIN_RETURN_PERC_FOR_TICKER_TO_BE_CONSIDERED:
+        if percentage_return_points > RUN_CFG.MIN_RETURN_PERC_FOR_TICKER_TO_BE_CONSIDERED:
             ticker_train_data, ticker_train_labels = extract_dataset_from_ticker(data, return_points)
             train_set.append(ticker_train_data)
             label_set.append(ticker_train_labels)
 
     X = np.vstack(train_set)
     Y = np.hstack(label_set)
-    print(X.shape, Y.shape)
-
-    if not os.path.exists('../data'):
-        os.makedirs('../data')
 
     np.save('../data/X.npy', X)
     np.save('../data/Y.npy', Y)
 
-
-if __name__ == '__main__':
-    main()
+    return True
