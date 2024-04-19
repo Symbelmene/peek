@@ -22,6 +22,13 @@ def get_return_points_above_percentage(ticker_data, return_percentage, return_wi
 def extract_dataset_from_ticker(data, mask, input_length=30, return_futures=False, future_length=5):
     locs = [(idx - input_length, idx) for idx, _ in enumerate(list(mask)) if idx - input_length >= 0]
     labels = mask.to_numpy()
+    train_columns = ['open', 'high', 'low', 'adj_close', 'volume']
+    data = data[train_columns]
+
+    # Catch if all data is filtered out
+    if not data:
+        return None, None
+
     train_set = np.array([data[start:end] for start, end in locs])
     labels = labels[input_length:]
     if not return_futures:

@@ -1,7 +1,7 @@
 import pandas as pd
 from connectors import PGConn
 
-from strategy import sell_on_profit_or_stop_loss
+from strategy import sell_on_profit_or_stop_loss, Finalytics
 from finclasses import Portfolio
 
 
@@ -12,12 +12,8 @@ def output_summary(data, date, pf):
           f'Total: {round(pf.cash + holdings, 2)}')
 
 
-def buy_stocks(RUN_CFG, data, pf, strat):
-    ticker_groups = data.groupby('ticker')
-    pred_groups = [(ticker, t_data[:RUN_CFG.HISTORY_SIZE]) for ticker, t_data in ticker_groups if
-                   len(t_data[:RUN_CFG.HISTORY_SIZE]) == RUN_CFG.HISTORY_SIZE]
-
-    signals = strat.infer_signal(pred_groups)
+def buy_stocks(RUN_CFG, data, pf, strategy):
+    signals = strategy.infer_signal(data)
 
     # Select top 5 signals
     signals = sorted(signals, key=lambda x: x[1], reverse=True)[:5]
@@ -36,7 +32,7 @@ def sell_stocks(data, pf):
             pf.sell(ticker, curr_ticker_value)
 
 
-def backtest(RUN_CFG, strat):
+def backtest(RUN_CFG, strategy):
     pg_conn = PGConn()
 
     pf = Portfolio(RUN_CFG.START_AMOUNT)
@@ -48,8 +44,27 @@ def backtest(RUN_CFG, strat):
 
         sell_stocks(data, pf)
 
-        buy_stocks(RUN_CFG, data, pf, strat)
+        buy_stocks(RUN_CFG, data, pf, strategy)
 
         output_summary(data, date, pf)
 
         date += pd.Timedelta(days=1)
+
+
+class RUN_CONFIG:
+    def __init__(self):
+        # Backtesting configuration
+        self.START_DATE = '2023-01-01'
+        self.END_DATE = '2024-01-01'
+        self.START_AMOUNT = 10000
+        self.BUY_AMOUNT = 500
+        self.HISTORY_SIZE = 80
+
+
+def main():
+    cfg = RUN_CONFIG()
+    backtest(cfg, Finalytics())
+
+
+if __name__ == '__main__':
+    main()

@@ -93,7 +93,7 @@ def train_model(RUN_CFG):
     run = wandb.init(
         project="peek",
         config=RUN_CFG,
-        dir='../wandb')
+        dir='../')
 
     # Build model
     model = buildLSTMModel(historySize=x_train.shape[1],

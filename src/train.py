@@ -1,3 +1,4 @@
+import os
 import model
 import dataset
 import strategy
@@ -28,17 +29,18 @@ def main():
     RUN_CFG = RUN_CONFIG()
 
     # Prepare the dataset
-    # dataset.create(RUN_CFG)
+    #dataset.create(RUN_CFG)
 
     # Train the model
-    # trained_model = model.train_model(RUN_CFG)
+    #trained_model = model.train_model(RUN_CFG)
+
+    # Or load the model
+    models_path = '../models'
+    latest_model_path = f'{models_path}/{[f for f in os.listdir(models_path)][0]}'
+    trained_model = model.load_model(latest_model_path)
 
     # Backtest the model
-    current_model_path = '../models/magic-dream-7-model.h5'
-    current_model = model.load_model(current_model_path)
-
-    strat = strategy.PeekModel(current_model)
-
+    strat = strategy.PeekModel(trained_model)
     simulate.backtest(RUN_CFG, strat)
 
 
