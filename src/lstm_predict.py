@@ -7,7 +7,7 @@ from keras.utils import to_categorical
 from config import Config
 cfg = Config()
 
-wandb.login(cfg.WANDB_API_KEY)
+wandb.login(key=cfg.WANDB_API_KEY)
 
 
 def buildLSTMModel(historySize, numHistoryVars):
@@ -48,10 +48,8 @@ def standardise_data(arr):
 
 
 def prepareTrainingDataset():
-    X = np.load('../data/X.npy')
-    Y = np.load('../data/Y.npy')
-
-    X, Y = trim_dataset_to_matching_labels(X, Y)
+    X = np.load('../../glint_dashboard/local_data/norm_data.npy')
+    Y = np.load('../../glint_dashboard/local_data/norm_labels.npy')
 
     # One-hot encode the labels
     Y = np.array([to_categorical(y, num_classes=2) for y in Y])
