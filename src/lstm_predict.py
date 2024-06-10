@@ -7,7 +7,7 @@ from keras.utils import to_categorical
 from config import Config
 cfg = Config()
 
-wandb.login(key=cfg.WANDB_API_KEY)
+# wandb.login(key=cfg.WANDB_API_KEY)
 
 
 def buildLSTMModel(historySize, numHistoryVars):
@@ -48,16 +48,14 @@ def standardise_data(arr):
 
 
 def prepareTrainingDataset():
-    X = np.load('../../glint_dashboard/local_data/norm_data.npy')
-    Y = np.load('../../glint_dashboard/local_data/norm_labels.npy')
+    X = np.load('../../glint-dashboard/local_data/norm_data.npy')
+    Y = np.load('../../glint-dashboard/local_data/norm_labels.npy')
 
     # One-hot encode the labels
     Y = np.array([to_categorical(y, num_classes=2) for y in Y])
 
     # Normalise data on a per-item basis
     X = np.apply_along_axis(standardise_data, 0, X)
-
-    keys = ['Open', 'High', 'Low', 'Close', 'Volume']
 
     # Shuffle the data
     indices = np.arange(X.shape[0])
@@ -73,20 +71,13 @@ def prepareTrainingDataset():
 
 
 def main():
-    RUN_CONFIG = {
-        'EPOCHS': 10,
-        'BATCH_SIZE': 256,
-        'HISTORY_SIZE': 30,
-        'NUM_HISTORY_VARS': 5
-    }
-
     # Create dataset
     x_train, y_train, x_val, y_val = prepareTrainingDataset()
 
-    run = wandb.init(
-        project="peek",
-        config={
-        })
+    # run = wandb.init(
+    #     project="peek",
+    #     config={
+    #     })
 
     # Build model
     model = buildLSTMModel(historySize=x_train.shape[1],
@@ -95,7 +86,7 @@ def main():
     print(model.summary())
 
     # Train model
-    model.fit(x_train, y_train, epochs=10, batch_size=256, validation_data=(x_val, y_val))
+    model.fit(x_train, y_train, epochs=10, batch_size=32, validation_data=(x_val, y_val))
 
 
 if __name__ == '__main__':
