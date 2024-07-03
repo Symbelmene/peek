@@ -3,11 +3,22 @@ import random
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from keras.utils import to_categorical
 
 from model import build_lstm_model
 from config import Config
 cfg = Config()
+
+# Initialise Weights and Biases
+import wandb
+wandb.init(project='stock-predictor')
+
+
+class WnB_Callback(tf.keras.callbacks.Callback):
+    def __init__(self):
+        super(WnB_Callback, self).__init__()
+
+    def on_epoch_end(self, epoch, logs=None):
+        wandb.log(logs)
 
 
 class Inline_Generator(tf.keras.utils.Sequence):
@@ -63,8 +74,8 @@ def prepare_phase_1_train_set(data_dir, batch_size, history_size):
     random.shuffle(train_files)
     random.shuffle(test_files)
 
-    return (Inline_Generator(train_files, batch_size, history_size),
-            Inline_Generator(test_files, batch_size, history_size))
+    return (Inline_Generator(train_files[::100], batch_size, history_size),
+            Inline_Generator(test_files[::100], batch_size, history_size))
 
 
 def train_phase_1(batch_size, num_epochs, history_size, data_dir, model_dir):
@@ -76,16 +87,19 @@ def train_phase_1(batch_size, num_epochs, history_size, data_dir, model_dir):
 
     # Build model
     sample_data = np.load(train_batch_generator.file_paths[0])
-    model = build_lstm_model(historySize=sample_data.shape[0], numHistoryVars=sample_data.shape[1])
 
-    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir='../logs', histogram_freq=1)
+    history_future = sample_data.shape[0] - history_size
+    model = build_lstm_model(history_size=history_size,
+                             future_size=history_future,
+                             num_history_vars=sample_data.shape[1])
 
     # Train model
+    wandb_callback = WnB_Callback()
     model.fit(x=train_batch_generator,
               epochs=num_epochs,
               batch_size=batch_size,
               validation_data=test_batch_generator,
-              callbacks=[tensorboard_callback,
+              callbacks=[wandb_callback,
                          tf.keras.callbacks.ModelCheckpoint(f'{model_dir}/stock_model_phase_1.keras',
                                                             monitor='val_loss',
                                                             save_best_only=True)])
@@ -96,8 +110,8 @@ def train_phase_1(batch_size, num_epochs, history_size, data_dir, model_dir):
 def main():
     data_dir = '/home/christ/findata/data'
     model_dir = '../models'
-    batch_size = 256
-    num_epochs = 50
+    batch_size = 128
+    num_epochs = 10
     history_size = 256
 
     # Check GPU is available

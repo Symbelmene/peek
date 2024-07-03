@@ -94,7 +94,7 @@ def main():
     min_return_point_pct = 0.2
 
     train_history = 256
-    train_future = 3
+    train_future = 1
 
     data_dir = '/home/christ/findata/data'
 
